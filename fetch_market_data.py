@@ -5,10 +5,10 @@ import psycopg2
 from psycopg2 import sql
 
 # 使用 Railway 環境變數連線
-DB_HOST = os.environ.get('PGHOST', 'YOUR_RAILWAY_DB_HOST')
-DB_USER = os.environ.get('PGUSER', 'YOUR_RAILWAY_DB_USER')
-DB_PASS = os.environ.get('PGPASSWORD', 'YOUR_RAILWAY_DB_PASSWORD')
-DB_NAME = os.environ.get('PGDATABASE', 'YOUR_RAILWAY_DB_NAME')
+DB_HOST = os.environ.get('PGHOST', 'postgres.railway.internal')
+DB_USER = os.environ.get('PGUSER', 'postgres')
+DB_PASS = os.environ.get('PGPASSWORD', 'ofckdwHocHqqnjIIPKpxfhsISYsqiPMr')
+DB_NAME = os.environ.get('PGDATABASE', 'railway')
 
 # 定義要抓取的股票代號
 TICKERS = ['AAPL', 'GOOGL', 'MSFT', 'AMZN']
