@@ -11,6 +11,9 @@ def fetch_data(ticker, start, end=None):
         data = yf.download(ticker, start=start, end=end, auto_adjust=False)
         if data.empty:
             raise ValueError(f"Failed to fetch {ticker} data")
+        # Flatten MultiIndex columns if present
+        if isinstance(data.columns, pd.MultiIndex):
+            data.columns = [col[0] for col in data.columns]
         return data
     except Exception as e:
         print(f"Error fetching {ticker}: {e}")
@@ -40,7 +43,6 @@ def _to_scalar(x):
     if isinstance(x, np.ndarray):
         return x.item() if x.size == 1 else x.ravel()[0]
     return x
-
 
 def format_signal_row(ts, row):
     sig_raw = _to_scalar(row['Signal'])
@@ -86,7 +88,10 @@ def main():
 
     if args.csv:
         Path(args.csv).parent.mkdir(parents=True, exist_ok=True)
-        signals.to_csv(args.csv, index_label="Date")
+        signals_reset = signals.reset_index()
+        # Ensure single-level column index
+        signals_reset.columns = [col[0] if isinstance(col, tuple) else col for col in signals_reset.columns]
+        signals_reset.to_csv(args.csv, index=False, columns=['Date', 'Close', 'SMA50', 'SMA200', 'Signal', 'Type'])
         print(f"Saved signals to {args.csv}")
 
 if __name__ == "__main__":
