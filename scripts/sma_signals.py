@@ -11,7 +11,6 @@ def fetch_data(ticker, start, end=None):
         data = yf.download(ticker, start=start, end=end, auto_adjust=False)
         if data.empty:
             raise ValueError(f"Failed to fetch {ticker} data")
-        # Flatten MultiIndex columns if present
         if isinstance(data.columns, pd.MultiIndex):
             data.columns = [col[0] for col in data.columns]
         return data
@@ -37,6 +36,14 @@ def compute_sma_signals(data, short_window=50, long_window=200):
     )
     return data
 
+def compute_macd(data, fast=12, slow=26, signal=9):
+    ema_fast = data['Close'].ewm(span=fast, adjust=False).mean()
+    ema_slow = data['Close'].ewm(span=slow, adjust=False).mean()
+    data['MACD'] = ema_fast - ema_slow
+    data['MACD_Signal'] = data['MACD'].ewm(span=signal, adjust=False).mean()
+    data['MACD_Hist'] = data['MACD'] - data['MACD_Signal']
+    return data
+
 def _to_scalar(x):
     if isinstance(x, pd.Series):
         return x.iloc[0]
@@ -54,15 +61,23 @@ def format_signal_row(ts, row):
     close_val = float(_to_scalar(row['Close']))
     sma50_val = float(_to_scalar(row['SMA50']))
     sma200_val = float(_to_scalar(row['SMA200']))
-    return f"{ts}: Close={close_val:.2f}, SMA50={sma50_val:.2f}, SMA200={sma200_val:.2f}, {action}"
+    macd_val = float(_to_scalar(row.get('MACD', 0)))
+    macd_sig_val = float(_to_scalar(row.get('MACD_Signal', 0)))
+    macd_hist_val = float(_to_scalar(row.get('MACD_Hist', 0)))
+    return (f"{ts}: Close={close_val:.2f}, SMA50={sma50_val:.2f}, SMA200={sma200_val:.2f}, "
+            f"MACD={macd_val:.2f}, Signal={macd_sig_val:.2f}, Hist={macd_hist_val:.2f}, {action}")
 
 def main():
-    parser = argparse.ArgumentParser(description="Calculate SMA crossover signals")
+    parser = argparse.ArgumentParser(description="Calculate SMA and MACD crossover signals")
     parser.add_argument("--ticker", default="QQQ", help="Stock ticker")
     parser.add_argument("--start", default=None, help="Start date (YYYY-MM-DD)")
     parser.add_argument("--end", default=None, help="End date (YYYY-MM-DD)")
     parser.add_argument("--short", type=int, default=50, help="Short SMA window")
     parser.add_argument("--long", type=int, default=200, help="Long SMA window")
+    parser.add_argument("--macd-fast", type=int, default=12, help="MACD fast EMA window")
+    parser.add_argument("--macd-slow", type=int, default=26, help="MACD slow EMA window")
+    parser.add_argument("--macd-signal", type=int, default=9, help="MACD signal EMA window")
+    parser.add_argument("--print-macd", action="store_true", help="Print latest MACD values")
     parser.add_argument("--last", type=int, default=10, help="Number of signals to show")
     parser.add_argument("--csv", help="Output CSV file path")
     args = parser.parse_args()
@@ -71,13 +86,15 @@ def main():
         args.start = (datetime.now(dt.UTC) - timedelta(days=365 * 3 + 30)).strftime("%Y-%m-%d")
     args.end = args.end or datetime.now(dt.UTC).strftime("%Y-%m-%d")
 
-    print(f"SMA crossover signals for {args.ticker} (short={args.short}, long={args.long}):")
+    print(f"SMA and MACD crossover signals for {args.ticker} (short={args.short}, long={args.long}, "
+          f"macd={args.macd_fast}/{args.macd_slow}/{args.macd_signal}):")
     data = fetch_data(args.ticker, args.start, args.end)
     if data is None:
         return
 
     data = compute_sma_signals(data, args.short, args.long)
-    signals = data[data['Signal'] != 0][['Close', 'SMA50', 'SMA200', 'Signal']]
+    data = compute_macd(data, args.macd_fast, args.macd_slow, args.macd_signal)
+    signals = data[data['Signal'] != 0][['Close', 'SMA50', 'SMA200', 'Signal', 'MACD', 'MACD_Signal', 'MACD_Hist']]
     if signals.empty:
         print("No crossover signals found.")
         return
@@ -86,12 +103,15 @@ def main():
     for ts, row in signals.tail(args.last).iterrows():
         print(format_signal_row(ts, row))
 
+    if args.print_macd:
+        latest = data.iloc[-1]
+        print(f"\nLatest MACD ({latest.name.date()}): MACD={latest['MACD']:.2f}, Signal={latest['MACD_Signal']:.2f}, Hist={latest['MACD_Hist']:.2f}")
+
     if args.csv:
         Path(args.csv).parent.mkdir(parents=True, exist_ok=True)
         signals_reset = signals.reset_index()
-        # Ensure single-level column index
         signals_reset.columns = [col[0] if isinstance(col, tuple) else col for col in signals_reset.columns]
-        signals_reset.to_csv(args.csv, index=False, columns=['Date', 'Close', 'SMA50', 'SMA200', 'Signal', 'Type'])
+        signals_reset.to_csv(args.csv, index=False, columns=['Date', 'Close', 'SMA50', 'SMA200', 'Signal', 'Type', 'MACD', 'MACD_Signal', 'MACD_Hist'])
         print(f"Saved signals to {args.csv}")
 
 if __name__ == "__main__":
