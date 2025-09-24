@@ -73,3 +73,16 @@ Date,Close,SMA50,SMA200,Signal,Type,MACD,MACD_Signal,MACD_Hist
 - 確認是否繼續使用 `timhun` 帳號，或切換至 `bbm2330pub@gmail.com`。
 - 檢查 `data_collector.py` 和 `fetch_market_data.py` 內容，明確其功能。
 - 完成 Grok API 在 Cursor IDE 的配置並測試進階策略。
+
+## 已完成進展（更新）
+3. **策略生成**（更新）：
+   - `sma_signals.py`：新增 MACD 交叉訊號（`MACD_Cross_Signal` 和 `MACD_Type`），生成 `market_data/QQQ_sma_macd_cross.csv`。
+   - 新增綜合 SMA 和 MACD 訊號（`Combined_Signal` 和 `Combined_Type`），生成 `market_data/QQQ_sma_macd_combined.csv`（18228 字節，9/24 22:57）：
+
+   Date,Close,SMA50,SMA200,Signal,Type,MACD,MACD_Signal,MACD_Hist,MACD_Cross_Signal,MACD_Type
+2020-01-03,214.17999267578125,,,0,No SMA Signal,-0.15794959435098122,-0.03158991887019624,-0.12635967548078497,-1,MACD Cross (Sell)
+...
+2025-06-24,539.780029296875,501.4837994384766,500.22924911499024,1,Golden Cross (Buy),7.868751843202517,8.971243468478114,-1.1024916252755972,0,No MACD Signal
+
+- 最新 MACD（2025-09-23）：MACD=7.91, Signal=6.31, Hist=1.61。
+- 提交至 GitHub（`8721008`）。
