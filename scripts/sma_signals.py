@@ -57,6 +57,20 @@ def compute_macd(data, fast=12, slow=26, signal=9):
     )
     return data
 
+def compute_combined_signal(data):
+    data['Combined_Signal'] = 0
+    data['Combined_Signal'] = np.where(
+        (data['Signal'] == 1) & (data['MACD_Cross_Signal'] == 1),
+        1,  # Combined Buy
+        data['Combined_Signal']
+    )
+    data['Combined_Signal'] = np.where(
+        (data['Signal'] == -1) & (data['MACD_Cross_Signal'] == -1),
+        -1,  # Combined Sell
+        data['Combined_Signal']
+    )
+    return data
+
 def _to_scalar(x):
     if isinstance(x, pd.Series):
         return x.iloc[0]
@@ -67,6 +81,7 @@ def _to_scalar(x):
 def format_signal_row(ts, row):
     sig_raw = _to_scalar(row['Signal'])
     macd_cross_raw = _to_scalar(row.get('MACD_Cross_Signal', 0))
+    combined_raw = _to_scalar(row.get('Combined_Signal', 0))
     try:
         sig = int(sig_raw)
     except Exception:
@@ -75,17 +90,22 @@ def format_signal_row(ts, row):
         macd_cross = int(macd_cross_raw)
     except Exception:
         macd_cross = int(float(macd_cross_raw)) if pd.notna(macd_cross_raw) else 0
+    try:
+        combined = int(combined_raw)
+    except Exception:
+        combined = int(float(combined_raw)) if pd.notna(combined_raw) else 0
     action = "BUY" if sig == 1 else ("SELL" if sig == -1 else "HOLD")
     macd_action = "BUY" if macd_cross == 1 else ("SELL" if macd_cross == -1 else "HOLD")
+    combined_action = "BUY" if combined == 1 else ("SELL" if combined == -1 else "HOLD")
     close_val = float(_to_scalar(row['Close']))
-    sma50_val = float(_to_scalar(row['SMA50']))
-    sma200_val = float(_to_scalar(row['SMA200']))
+    sma50_val = float(_to_scalar(row.get('SMA50', 0)))
+    sma200_val = float(_to_scalar(row.get('SMA200', 0)))
     macd_val = float(_to_scalar(row.get('MACD', 0)))
     macd_sig_val = float(_to_scalar(row.get('MACD_Signal', 0)))
     macd_hist_val = float(_to_scalar(row.get('MACD_Hist', 0)))
     return (f"{ts}: Close={close_val:.2f}, SMA50={sma50_val:.2f}, SMA200={sma200_val:.2f}, "
             f"MACD={macd_val:.2f}, Signal={macd_sig_val:.2f}, Hist={macd_hist_val:.2f}, "
-            f"SMA Action={action}, MACD Action={macd_action}")
+            f"SMA Action={action}, MACD Action={macd_action}, Combined Action={combined_action}")
 
 def main():
     parser = argparse.ArgumentParser(description="Calculate SMA and MACD crossover signals")
@@ -114,13 +134,16 @@ def main():
 
     data = compute_sma_signals(data, args.short, args.long)
     data = compute_macd(data, args.macd_fast, args.macd_slow, args.macd_signal)
-    signals = data[(data['Signal'] != 0) | (data['MACD_Cross_Signal'] != 0)][['Close', 'SMA50', 'SMA200', 'Signal', 'MACD', 'MACD_Signal', 'MACD_Hist', 'MACD_Cross_Signal']]
+    data = compute_combined_signal(data)
+    signals = data[(data['Signal'] != 0) | (data['MACD_Cross_Signal'] != 0) | (data['Combined_Signal'] != 0)][
+        ['Close', 'SMA50', 'SMA200', 'Signal', 'MACD', 'MACD_Signal', 'MACD_Hist', 'MACD_Cross_Signal', 'Combined_Signal']]
     if signals.empty:
         print("No crossover signals found.")
         return
 
     signals['Type'] = signals['Signal'].map({1: "Golden Cross (Buy)", -1: "Death Cross (Sell)", 0: "No SMA Signal"})
     signals['MACD_Type'] = signals['MACD_Cross_Signal'].map({1: "MACD Cross (Buy)", -1: "MACD Cross (Sell)", 0: "No MACD Signal"})
+    signals['Combined_Type'] = signals['Combined_Signal'].map({1: "Combined (Buy)", -1: "Combined (Sell)", 0: "No Combined Signal"})
     for ts, row in signals.tail(args.last).iterrows():
         print(format_signal_row(ts, row))
 
@@ -132,7 +155,9 @@ def main():
         Path(args.csv).parent.mkdir(parents=True, exist_ok=True)
         signals_reset = signals.reset_index()
         signals_reset.columns = [col[0] if isinstance(col, tuple) else col for col in signals_reset.columns]
-        signals_reset.to_csv(args.csv, index=False, columns=['Date', 'Close', 'SMA50', 'SMA200', 'Signal', 'Type', 'MACD', 'MACD_Signal', 'MACD_Hist', 'MACD_Cross_Signal', 'MACD_Type'])
+        signals_reset.to_csv(args.csv, index=False, columns=[
+            'Date', 'Close', 'SMA50', 'SMA200', 'Signal', 'Type', 'MACD', 'MACD_Signal', 'MACD_Hist',
+            'MACD_Cross_Signal', 'MACD_Type', 'Combined_Signal', 'Combined_Type'])
         print(f"Saved signals to {args.csv}")
 
 if __name__ == "__main__":
